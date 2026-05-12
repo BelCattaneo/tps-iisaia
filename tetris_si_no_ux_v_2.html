@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Respuesta con rompecabezas</title>
+  <style>
+    :root {
+      --cell: 42px;
+      --cols: 8;
+      --rows: 4;
+      --ink: #1f2937;
+      --muted: #6b7280;
+      --panel: #ffffff;
+      --grid: #e5e7eb;
+      --target: #111827;
+      --yes-border: #0f8f6c;
+      --no-border: #c73662;
+      --yes-art: none;
+      --no-art: none;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top, #fff7d6, #f6f0e6 45%, #ece7df);
+      color: var(--ink);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      user-select: none;
+      overflow-x: hidden;
+    }
+
+    .screen {
+      width: min(1080px, 100%);
+      background: rgba(255, 255, 255, 0.86);
+      border: 2px solid rgba(17, 24, 39, 0.08);
+      border-radius: 28px;
+      box-shadow: 0 24px 70px rgba(31, 41, 55, 0.16);
+      padding: 28px;
+    }
+
+    .intro {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: flex-start;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(28px, 4vw, 48px);
+      line-height: 1.05;
+      letter-spacing: -0.04em;
+    }
+
+    .question {
+      font-size: clamp(20px, 2.6vw, 32px);
+      font-weight: 800;
+      margin-top: 8px;
+    }
+
+    .hint {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 16px;
+      max-width: 680px;
+    }
+
+    .status {
+      min-width: 220px;
+      background: #111827;
+      color: white;
+      border-radius: 18px;
+      padding: 16px;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .status small {
+      display: block;
+      color: #d1d5db;
+      font-weight: 500;
+      margin-top: 6px;
+    }
+
+    .game {
+      display: grid;
+      grid-template-columns: 1fr 410px;
+      gap: 28px;
+      align-items: start;
+    }
+
+    .pieces-panel, .answer-panel {
+      background: var(--panel);
+      border-radius: 24px;
+      border: 2px solid rgba(17, 24, 39, 0.08);
+      padding: 20px;
+      overflow: visible;
+    }
+
+    .panel-title {
+      margin: 0 0 14px;
+      font-size: 18px;
+      font-weight: 850;
+    }
+
+    .pieces {
+      min-height: 640px;
+      position: relative;
+      border-radius: 18px;
+      background-image:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+      background-size: var(--cell) var(--cell);
+      background-color: #fafafa;
+      overflow: visible;
+    }
+
+    .answer-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .target-wrap {
+      padding: 12px;
+      border: 4px solid var(--target);
+      border-radius: 8px;
+      background: #f9fafb;
+      position: relative;
+      overflow: visible;
+    }
+
+    .target {
+      position: relative;
+      width: calc(var(--cell) * var(--cols));
+      height: calc(var(--cell) * var(--rows));
+      background-image:
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+      background-size: var(--cell) var(--cell);
+      background-color: white;
+      overflow: visible;
+    }
+
+    .target::after {
+      content: "zona de respuesta";
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: rgba(17, 24, 39, 0.13);
+      font-size: 22px;
+      font-weight: 900;
+      text-transform: uppercase;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .piece {
+      position: absolute;
+      cursor: grab;
+      touch-action: none;
+      transform-origin: top left;
+      filter: drop-shadow(0 8px 8px rgba(0,0,0,0.14));
+      z-index: 10;
+    }
+
+    .piece.dragging {
+      cursor: grabbing;
+      z-index: 99999;
+      filter: drop-shadow(0 18px 18px rgba(0,0,0,0.25));
+    }
+
+    .piece.locked {
+      cursor: default;
+      filter: none;
+      z-index: 2;
+    }
+
+    .cell {
+      position: absolute;
+      width: var(--cell);
+      height: var(--cell);
+      border: 2px solid rgba(17, 24, 39, 0.32);
+      background-repeat: no-repeat;
+      background-size: calc(var(--cell) * var(--cols)) calc(var(--cell) * var(--rows));
+    }
+
+    .piece.yes .cell {
+      background-image: var(--yes-art);
+      border-color: var(--yes-border);
+    }
+
+    .piece.no .cell {
+      background-image: var(--no-art);
+      border-color: var(--no-border);
+    }
+
+    .piece.wrong { animation: shake 260ms ease-in-out; }
+
+    @keyframes shake {
+      0%, 100% { transform: translate(0, 0); }
+      25% { transform: translate(-7px, 0); }
+      50% { transform: translate(7px, 0); }
+      75% { transform: translate(-5px, 0); }
+    }
+
+    .legend {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      background: #f3f4f6;
+    }
+
+    .dot {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      display: inline-block;
+    }
+
+    .dot.yes { background: #20c997; }
+    .dot.no { background: #ff5c8a; }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 18px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    button {
+      border: 0;
+      border-radius: 14px;
+      padding: 12px 16px;
+      font-weight: 850;
+      cursor: pointer;
+      background: #e5e7eb;
+      color: #111827;
+      font-size: 15px;
+    }
+
+    button.primary {
+      background: #111827;
+      color: white;
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    button.primary.enabled { opacity: 1; cursor: pointer; }
+
+    .done-screen {
+      display: none;
+      min-height: 520px;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      flex-direction: column;
+    }
+
+    .done-screen h2 {
+      font-size: clamp(36px, 7vw, 86px);
+      margin: 0 0 12px;
+      letter-spacing: -0.06em;
+    }
+
+    .done-screen p {
+      margin: 0;
+      font-size: 20px;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    @media (max-width: 920px) {
+      .intro, .game { grid-template-columns: 1fr; display: block; }
+      .status { margin-top: 16px; }
+      .pieces-panel { margin-bottom: 20px; }
+      .pieces { min-height: 620px; }
+      .target { transform: scale(0.86); transform-origin: top left; }
+      .target-wrap { width: calc(var(--cell) * var(--cols) * 0.86 + 24px); height: calc(var(--cell) * var(--rows) * 0.86 + 24px); }
+    }
+  </style>
+</head>
+<body>
+  <main class="screen" id="gameScreen">
+    <section class="intro">
+      <div>
+        <h1>Respondé armando el rompecabezas</h1>
+        <div class="question">¿Querés continuar?</div>
+        <p class="hint">Arrastrá piezas de una sola respuesta. Cada pieza es un recorte de la imagen final: al encastrarlas, aparece <strong>SÍ</strong> o <strong>NO</strong>.</p>
+      </div>
+      <div class="status" id="status">Sin respuesta completa<small>Colocá 5 piezas de la misma opción.</small></div>
+    </section>
+
+    <section class="game">
+      <div class="pieces-panel">
+        <p class="panel-title">Piezas disponibles mezcladas</p>
+        <div class="pieces" id="piecesArea"></div>
+        <div class="legend">
+          <span class="tag"><span class="dot yes"></span> recortes SÍ</span>
+          <span class="tag"><span class="dot no"></span> recortes NO</span>
+        </div>
+      </div>
+
+      <div class="answer-panel">
+        <p class="panel-title">Rectángulo de respuesta</p>
+        <div class="target-wrap">
+          <div class="target" id="target"></div>
+        </div>
+        <div class="actions">
+          <button id="resetBtn">Reiniciar piezas</button>
+          <button class="primary" id="nextBtn" disabled>Siguiente pantalla</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <section class="screen done-screen" id="doneScreen">
+    <h2 id="finalAnswer">Respuesta lista</h2>
+    <p>El rompecabezas quedó completo con una sola opción.</p>
+    <div class="actions"><button id="againBtn">Volver a jugar</button></div>
+  </section>
+
+  <script>
+    const CELL = 42;
+    const COLS = 8;
+    const ROWS = 4;
+    const TARGET_W = CELL * COLS;
+    const TARGET_H = CELL * ROWS;
+
+    const target = document.getElementById('target');
+    const piecesArea = document.getElementById('piecesArea');
+    const statusBox = document.getElementById('status');
+    const nextBtn = document.getElementById('nextBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const againBtn = document.getElementById('againBtn');
+    const gameScreen = document.getElementById('gameScreen');
+    const doneScreen = document.getElementById('doneScreen');
+    const finalAnswer = document.getElementById('finalAnswer');
+
+    const targetMap = {
+      yes: { label: 'SÍ', className: 'yes' },
+      no: { label: 'NO', className: 'no' }
+    };
+
+    // Estas 5 piezas cubren todo el rectángulo 8x4 sin superponerse.
+    // No necesitan rotación: cada una encastra directamente en su posición final.
+    const basePieces = [
+      { id: 'corner', cells: [[0,0],[1,0],[2,0],[0,1],[0,2],[1,2]] },
+      { id: 'zig',    cells: [[3,0],[4,0],[4,1],[5,1],[5,2],[6,2]] },
+      { id: 'cap',    cells: [[5,0],[6,0],[7,0],[6,1],[7,1],[7,2]] },
+      { id: 'bridge', cells: [[1,1],[2,1],[3,1],[2,2],[3,2],[0,3],[1,3],[2,3]] },
+      { id: 'base',   cells: [[4,2],[3,3],[4,3],[5,3],[6,3],[7,3]] }
+    ];
+
+    let active = null;
+    let solvedOption = null;
+
+    function svgArt(word, bgA, bgB, ink) {
+      const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="${TARGET_W}" height="${TARGET_H}" viewBox="0 0 ${TARGET_W} ${TARGET_H}">
+          <defs>
+            <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+              <stop offset="0" stop-color="${bgA}"/>
+              <stop offset="1" stop-color="${bgB}"/>
+            </linearGradient>
+          </defs>
+          <rect width="100%" height="100%" rx="0" fill="url(#g)"/>
+          <circle cx="42" cy="34" r="54" fill="rgba(255,255,255,0.18)"/>
+          <circle cx="292" cy="132" r="76" fill="rgba(255,255,255,0.12)"/>
+          <text x="50%" y="55%" text-anchor="middle" dominant-baseline="middle"
+            font-family="Arial, Helvetica, sans-serif" font-size="118" font-weight="900"
+            fill="${ink}" letter-spacing="4">${word}</text>
+        </svg>`;
+      return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+    }
+
+    document.documentElement.style.setProperty('--yes-art', svgArt('SÍ', '#b8f7df', '#20c997', '#063f31'));
+    document.documentElement.style.setProperty('--no-art', svgArt('NO', '#ffd0de', '#ff5c8a', '#5f102b'));
+
+    function makePieces() {
+      piecesArea.innerHTML = '';
+      target.innerHTML = '';
+      solvedOption = null;
+      nextBtn.disabled = true;
+      nextBtn.classList.remove('enabled');
+      statusBox.innerHTML = 'Sin respuesta completa<small>Colocá 5 piezas de la misma opción.</small>';
+
+      const all = shuffle([
+        ...basePieces.map(p => ({ ...p, option: 'yes', id: `yes-${p.id}` })),
+        ...basePieces.map(p => ({ ...p, option: 'no', id: `no-${p.id}` }))
+      ]);
+
+      const starts = [
+        [18,24],
+        [180,24],
+        [18,170],
+        [180,170],
+        [18,330],
+        [180,330],
+        [96,92],
+        [96,252],
+        [320,220],
+        [320,60]
+      ];
+
+      all.forEach((data, index) => {
+        const el = createPiece(data);
+        el.style.left = `${starts[index][0]}px`;
+        el.style.top = `${starts[index][1]}px`;
+        piecesArea.appendChild(el);
+        enableDrag(el);
+      });
+    }
+
+    function createPiece(data) {
+      const el = document.createElement('div');
+      el.className = `piece ${data.option}`;
+      el.dataset.id = data.id;
+      el.dataset.option = data.option;
+      el.dataset.base = data.id.replace('yes-', '').replace('no-', '');
+      el.dataset.locked = 'false';
+
+      const minX = Math.min(...data.cells.map(c => c[0]));
+      const minY = Math.min(...data.cells.map(c => c[1]));
+
+      data.cells.forEach(([gx, gy]) => {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.style.left = `${(gx - minX) * CELL}px`;
+        cell.style.top = `${(gy - minY) * CELL}px`;
+        cell.style.backgroundPosition = `${-gx * CELL}px ${-gy * CELL}px`;
+        el.appendChild(cell);
+      });
+
+      const width = (Math.max(...data.cells.map(c => c[0])) - minX + 1) * CELL;
+      const height = (Math.max(...data.cells.map(c => c[1])) - minY + 1) * CELL;
+      el.style.width = `${width}px`;
+      el.style.height = `${height}px`;
+      el.dataset.targetX = String(minX * CELL);
+      el.dataset.targetY = String(minY * CELL);
+      return el;
+    }
+
+    function enableDrag(el) {
+      el.addEventListener('pointerdown', (event) => {
+        if (el.dataset.locked === 'true') return;
+        event.preventDefault();
+
+        const rect = el.getBoundingClientRect();
+        active = {
+          el,
+          offsetX: event.clientX - rect.left,
+          offsetY: event.clientY - rect.top,
+          originParent: el.parentElement,
+          originLeft: parseFloat(el.style.left),
+          originTop: parseFloat(el.style.top)
+        };
+
+        document.body.appendChild(el);
+        el.style.left = `${rect.left}px`;
+        el.style.top = `${rect.top}px`;
+        el.style.position = 'fixed';
+        el.style.pointerEvents = 'none';
+        el.classList.add('dragging');
+        movePiece(event.clientX, event.clientY);
+      });
+    }
+
+    window.addEventListener('pointermove', (event) => {
+      if (!active) return;
+      movePiece(event.clientX, event.clientY);
+    });
+
+    window.addEventListener('pointerup', () => {
+      if (!active) return;
+      releasePiece(active.el);
+    });
+
+    function movePiece(clientX, clientY) {
+      active.el.style.left = `${clientX - active.offsetX}px`;
+      active.el.style.top = `${clientY - active.offsetY}px`;
+    }
+
+    function releasePiece(el) {
+      el.classList.remove('dragging');
+      el.style.pointerEvents = 'auto';
+
+      const tRect = target.getBoundingClientRect();
+      const pRect = el.getBoundingClientRect();
+      const centerX = pRect.left + pRect.width / 2;
+      const centerY = pRect.top + pRect.height / 2;
+      const inside = centerX >= tRect.left && centerX <= tRect.right && centerY >= tRect.top && centerY <= tRect.bottom;
+
+      if (inside) {
+        const expectedX = Number(el.dataset.targetX);
+        const expectedY = Number(el.dataset.targetY);
+        const relativeX = pRect.left - tRect.left;
+        const relativeY = pRect.top - tRect.top;
+        const closeEnough = Math.abs(relativeX - expectedX) < CELL * 0.85 && Math.abs(relativeY - expectedY) < CELL * 0.85;
+        const sameOptionOk = canPlaceOption(el.dataset.option);
+        const positionFree = !slotTaken(el.dataset.base);
+
+        if (closeEnough && sameOptionOk && positionFree) {
+          target.appendChild(el);
+          el.style.position = 'absolute';
+          el.style.left = `${expectedX}px`;
+          el.style.top = `${expectedY}px`;
+          el.dataset.locked = 'true';
+          el.classList.add('locked');
+          checkSolved();
+          active = null;
+          return;
+        }
+      }
+
+      bounceBack(el);
+      active = null;
+    }
+
+    function canPlaceOption(option) {
+      const placed = [...target.querySelectorAll('.piece.locked')];
+      return placed.length === 0 || placed.every(p => p.dataset.option === option);
+    }
+
+    function slotTaken(baseId) {
+      return [...target.querySelectorAll('.piece.locked')].some(p => p.dataset.base === baseId);
+    }
+
+    function bounceBack(el) {
+      const parent = active.originParent;
+      parent.appendChild(el);
+      el.style.position = 'absolute';
+      el.style.left = `${active.originLeft}px`;
+      el.style.top = `${active.originTop}px`;
+      el.classList.add('wrong');
+      setTimeout(() => el.classList.remove('wrong'), 280);
+    }
+
+    function checkSolved() {
+      const placed = [...target.querySelectorAll('.piece.locked')];
+      if (placed.length === 5 && placed.every(p => p.dataset.option === placed[0].dataset.option)) {
+        solvedOption = placed[0].dataset.option;
+        const label = targetMap[solvedOption].label;
+        statusBox.innerHTML = `Respuesta: ${label}<small>Rompecabezas completo.</small>`;
+        nextBtn.disabled = false;
+        nextBtn.classList.add('enabled');
+      } else {
+        const option = placed[0] ? targetMap[placed[0].dataset.option].label : 'ninguna';
+        statusBox.innerHTML = `${placed.length}/5 piezas colocadas<small>Respuesta en armado: ${option}</small>`;
+      }
+    }
+
+    function shuffle(array) {
+      return array.map(value => ({ value, sort: Math.random() }))
+        .sort((a, b) => a.sort - b.sort)
+        .map(({ value }) => value);
+    }
+
+    resetBtn.addEventListener('click', makePieces);
+    againBtn.addEventListener('click', () => {
+      doneScreen.style.display = 'none';
+      gameScreen.style.display = 'block';
+      makePieces();
+    });
+
+    nextBtn.addEventListener('click', () => {
+      if (!solvedOption) return;
+      finalAnswer.textContent = solvedOption === 'yes' ? 'Elegiste SÍ' : 'Elegiste NO';
+      gameScreen.style.display = 'none';
+      doneScreen.style.display = 'flex';
+    });
+
+    makePieces();
+  </script>
+</body>
+</html>
