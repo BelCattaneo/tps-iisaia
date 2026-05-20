@@ -1,0 +1,221 @@
+openapi: 3.0.3
+info:
+  title: API de Mapeo de Puntos de Venta
+  description: API para gestionar nodos (puntos de venta) y operaciones entre ellos.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8000
+    description: Servidor de desarrollo
+
+paths:
+  /nodes:
+    post:
+      summary: Crear un nuevo nodo
+      operationId: createNode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NodeInput'
+      responses:
+        '201':
+          description: Nodo creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Node'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /nodes/{id}:
+    get:
+      summary: Obtener un nodo por ID
+      operationId: getNode
+      parameters:
+        - $ref: '#/components/parameters/NodeId'
+      responses:
+        '200':
+          description: Nodo encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Node'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      summary: Editar el nombre de un nodo
+      operationId: updateNode
+      parameters:
+        - $ref: '#/components/parameters/NodeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NodeUpdate'
+      responses:
+        '200':
+          description: Nodo actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Node'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /nodes/{id}/operations:
+    get:
+      summary: Listar operaciones de un nodo
+      operationId: listNodeOperations
+      parameters:
+        - $ref: '#/components/parameters/NodeId'
+      responses:
+        '200':
+          description: Lista de operaciones
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Operation'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      summary: Crear una operación para un nodo
+      operationId: createNodeOperation
+      parameters:
+        - $ref: '#/components/parameters/NodeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperationInput'
+      responses:
+        '201':
+          description: Operación creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /nodes/{id}/operations/{operation_id}:
+    delete:
+      summary: Eliminar una operación de un nodo
+      operationId: deleteNodeOperation
+      parameters:
+        - $ref: '#/components/parameters/NodeId'
+        - name: operation_id
+          in: path
+          required: true
+          description: ID de la operación
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Operación eliminada
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  parameters:
+    NodeId:
+      name: id
+      in: path
+      required: true
+      description: ID del nodo
+      schema:
+        type: integer
+
+  schemas:
+    Node:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        type:
+          type: string
+        x_coordinate:
+          type: number
+          format: float
+        y_coordinate:
+          type: number
+          format: float
+      required: [id, name, type, x_coordinate, y_coordinate]
+
+    NodeUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+      required: [name]
+
+    NodeInput:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        x_coordinate:
+          type: number
+          format: float
+        y_coordinate:
+          type: number
+          format: float
+      required: [name, type, x_coordinate, y_coordinate]
+
+    Operation:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+        origin_id:
+          type: integer
+        destination_id:
+          type: integer
+      required: [id, type, origin_id, destination_id]
+
+    OperationInput:
+      type: object
+      properties:
+        type:
+          type: string
+        origin_id:
+          type: integer
+        destination_id:
+          type: integer
+      required: [type, origin_id, destination_id]
+
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+      required: [message]
+
+  responses:
+    BadRequest:
+      description: Petición inválida
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
